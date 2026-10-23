@@ -57,8 +57,9 @@ async fn main() {
                 let heartbeat: Heartbeat = serde_json::from_slice(&content[..header_end])
                     .expect("Failed to parse received heartbeat!");
 
+                let payload_bytes = &content[header_end + 1..];
+
                 if args.pretty_print {
-                    
                     let now_ms = chrono::Utc::now().timestamp_millis();
                     let sent_at =
                         chrono::DateTime::from_timestamp_millis(heartbeat.sent_at_ms as i64)
@@ -66,12 +67,12 @@ async fn main() {
                             .unwrap_or_else(|| format!("{} ms (invalid)", heartbeat.sent_at_ms));
 
                     let payload = match &heartbeat.payload {
-                        Some(p) => format!("{} bytes, sha256 {}", p.len, hex::encode(p.hash)),
+                        Some(p) => format!("{} bytes, sha256={}", p.len, hex::encode(p.hash)),
                         None => "none".to_string(),
                     };
-                    
+
                     info!(
-                        "Heartbeat #{} from {} (session {:08x})\n  sent at:  {} ({} ms ago)\n  interval: {} ms\n  uptime:   {} s\n  payload:  {}",
+                        "Heartbeat #{} from {} (session {:08x})\n  sent at:  {} ({}ms ago)\n  interval: {}ms\n  uptime:   {}s\n  payload:  {}",
                         heartbeat.seqnum,
                         heartbeat.beacon,
                         heartbeat.session_id,
@@ -88,6 +89,22 @@ async fn main() {
                         content.len(),
                         String::from_utf8_lossy(&content)
                     );
+                }
+
+                if args.verify_hash && heartbeat.payload.is_some() {
+                    let hash_bytes = hex::encode(Sha256::digest(&payload_bytes));
+                    let correct = heartbeat.payload.is_some_and(|p| {
+                        // debug!("hex::encode(p.hash)={}", hex::encode(p.hash));
+                        // debug!("hash_bytes={hash_bytes}");
+                        hex::encode(p.hash) == hash_bytes
+                    });
+                    if correct {
+                        info!("Hash of the payload bytes matches with the hash found in heartbeat");
+                    } else {
+                        error!(
+                            "Hash of the payload bytes did not match the hash in the heartbeat, the payload bytes were not received properly."
+                        );
+                    }
                 }
             }
             Err(e) => {
