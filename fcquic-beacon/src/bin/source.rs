@@ -56,8 +56,8 @@ async fn main() {
     let session_id: u32 = rand::random();
     info!("Session ID: {session_id}");
 
-    debug!("Will sleep for 5 seconds");
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    debug!("Will sleep for 2 seconds");
+    tokio::time::sleep(Duration::from_secs(2)).await;
     debug!("Done sleeping, will start sending stuff");
 
     let start = Instant::now();

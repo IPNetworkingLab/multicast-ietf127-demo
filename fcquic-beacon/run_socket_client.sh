@@ -16,7 +16,7 @@ rm -f "$OUT_DIR"/heartbeat_*
 rm -f "$SOCK"
 
 ip netns exec client$ID env RUST_LOG=debug "$MQ/target/release/fc-recv-file-transfer" https://10.10.0.2:4433/heartbeat \
-    -l 10.10.$ID.2 --flexicast --stay-open --transfer-kind "file,socket,$SOCK" > "$OUT_DIR/receiver.log" 2>&1 &
+    -l 10.10.$ID.2 --flexicast --transport-feedback --json-output $SHARED/state.json  --stay-open --transfer-kind "file,socket,$SOCK" > "$OUT_DIR/receiver.log" 2>&1 &
 RECVR_PID=$!
 
 # kill the receiver when this script exits

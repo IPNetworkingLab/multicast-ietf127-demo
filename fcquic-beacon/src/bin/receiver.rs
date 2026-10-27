@@ -43,7 +43,7 @@ async fn main() {
     loop {
         match socket.recv_from(buffer.as_mut_slice()).await {
             Ok((read, _from)) => {
-                debug!("Read {read} from fcquic receiver");
+                debug!("Read {read} bytes from fcquic receiver");
                 let filename = std::str::from_utf8(&buffer[..read]).unwrap();
 
                 // we just received a filename over the socket, so we

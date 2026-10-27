@@ -7,14 +7,18 @@ SOCK=/tmp/fcquic-source.sock
 # The beacon sends relative filenames, so both processes run from this directory.
 WORK_DIR=./source-heartbeats
 
+cp ./cert.key $WORK_DIR
+cp ./cert.crt $WORK_DIR
+
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 rm -f "$SOCK"
 
+
 # the source binds to a socket with the address $SOCK
-ip netns exec server1 env RUST_LOG=debug "$MQ/target/release/fc-flow-file-transfer" \
+ip netns exec server1 env RUST_LOG=debug RUST_BACKTRACE=full "$MQ/target/release/fc-flow-file-transfer" \
     --flexicast --unicast --src 10.10.0.2:4433 --mc-src-addr 10.10.0.2:4443 --fc-timer 0 \
-    --cert-path "$MQ/apps/src/bin" --transfer-kind "file,socket,$SOCK" > source.log 2>&1 &
+    --fall-back-delay 500 --cert-path "." --transfer-kind "file,socket,$SOCK" > source.log 2>&1 &
 SRC_PID=$!
 
 # kill the source when this script exits
@@ -27,4 +31,5 @@ while [ ! -S "$SOCK" ]; do
 done
 
 # the source binary will send filenames to the source via a socket using the source address $SOCK
-RUST_LOG=debug "$BEACON" "$SOCK" "$WORK_DIR" "$@"
+# we already cd'd into $WORK_DIR, so the heartbeats are written to the current directory
+RUST_LOG=debug "$BEACON" "$SOCK" . "$@"
