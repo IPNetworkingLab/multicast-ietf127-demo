@@ -261,7 +261,7 @@ async fn beacon_loop(
     let period = Duration::from_millis(send_interval as u64);
     // but for the first period, we start it in 5 seconds
     let mut interval =
-        tokio::time::interval_at(tokio::time::Instant::now() + Duration::from_secs(5), period);
+        tokio::time::interval_at(tokio::time::Instant::now() + Duration::from_secs(2), period);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     let start = Instant::now();
