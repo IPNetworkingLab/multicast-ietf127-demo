@@ -29,7 +29,7 @@ struct Args {
     send_interval: u32,
 
     /// every how many heartbeats a payload is added (e.g., 10 means every 10th heartbeat)
-    #[clap(long = "payload-every", default_value = "10")]
+    #[clap(long = "payload-every", default_value = "10", value_parser = clap::value_parser!(u64).range(1..))]
     payload_every: u64,
 
     /// size of the payload in bytes

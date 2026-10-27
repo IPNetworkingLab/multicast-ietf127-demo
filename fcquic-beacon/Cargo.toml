@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+tokio-fcquiche = { path = "../../multicast-quic/tokio-fcquiche", features=[ "qlog" ] }
+tokio-quiche = { path = "../../multicast-quic/tokio-quiche" }
+quiche = { path = "../../multicast-quic/quiche" }
 env_logger = "0.11.8"
 log = "0.4.34"
 mio = { version = "1.2.4", features = ["os-poll", "net"] }

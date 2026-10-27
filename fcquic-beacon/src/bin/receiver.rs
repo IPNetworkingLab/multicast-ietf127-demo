@@ -16,11 +16,11 @@ struct Args {
     socket_bind_path: String,
 
     /// whether or not the hash of the payloads is checked
-    #[clap(long = "verify-hash", default_value_t = true)]
+    #[clap(long = "verify-hash", default_value_t = true, action = clap::ArgAction::Set)]
     verify_hash: bool,
 
     /// whether or not to parse the JSON content of the hearbeats and pretty print them
-    #[clap(long = "pretty-print", default_value_t = true)]
+    #[clap(long = "pretty-print", default_value_t = true, action = clap::ArgAction::Set)]
     pretty_print: bool,
 }
 
@@ -57,7 +57,7 @@ async fn main() {
                 let heartbeat: Heartbeat = serde_json::from_slice(&content[..header_end])
                     .expect("Failed to parse received heartbeat!");
 
-                let payload_bytes = &content[header_end + 1..];
+                let payload_bytes = &content.get(header_end + 1..).unwrap_or(&[]);
 
                 if args.pretty_print {
                     let now_ms = chrono::Utc::now().timestamp_millis();
@@ -66,13 +66,19 @@ async fn main() {
                             .map(|t| t.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string())
                             .unwrap_or_else(|| format!("{} ms (invalid)", heartbeat.sent_at_ms));
 
+                    let beacon_start = chrono::DateTime::from_timestamp_millis(
+                        heartbeat.sent_at_ms as i64 - heartbeat.uptime_s as i64 * 1000,
+                    )
+                    .map(|t| t.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                    .unwrap_or_else(|| "invalid".to_string());
+
                     let payload = match &heartbeat.payload {
                         Some(p) => format!("{} bytes, sha256={}", p.len, hex::encode(p.hash)),
                         None => "none".to_string(),
                     };
 
                     info!(
-                        "Heartbeat #{} from {} (session {:08x})\n  sent at:  {} ({}ms ago)\n  interval: {}ms\n  uptime:   {}s\n  payload:  {}",
+                        "Heartbeat #{} from {} (session {:08x})\n  sent at:  {} ({}ms ago)\n  interval: {}ms\n  uptime:   {}s (beacon started at {})\n  payload:  {}",
                         heartbeat.seqnum,
                         heartbeat.beacon,
                         heartbeat.session_id,
@@ -80,6 +86,7 @@ async fn main() {
                         now_ms - heartbeat.sent_at_ms as i64,
                         heartbeat.interval_ms,
                         heartbeat.uptime_s,
+                        beacon_start,
                         payload,
                     );
                 } else {
