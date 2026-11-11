@@ -138,14 +138,26 @@ struct Args {
     #[clap(long = "ack-delay-frame", default_value = "100")]
     ack_delay_latency: u64,
 
-    /// Keepalive interval on the flexicast flow, in ms.
-    /// If nothing was sent on the multicast flow for this long,
-    /// then the source sends a PING frame so that receivers see
-    /// at least one packet on the mc flow per interval.
-    /// this is disabled if the value is not set
-    /// AMT fallback doesn't work properly when this is disabled
-    #[clap(long = "fc-keepalive")]
-    fc_keepalive: Option<u64>,
+    /// Interval for non ack eliciting pings to be sent on the multicast flow in
+    /// milliseconds. This frame will be sent on the mc flow every interval,
+    /// except if the application is active, in which case the pings will be
+    /// suppressed. This is usefule to make sure that the FC flow is seen as
+    /// alive by receivers (and is used to that effect to enable AMT fallback)
+    #[clap(long = "fc-ping-interval")]
+    fc_ping_interval: u64,
+
+    /// Number of new clients that will be asked to ACK a certain number of
+    /// FC_PING frame. These frames go out when the multicast flow is idle.
+    /// Example: fc-ping-new-clients-acks = 10, fc-ping-acks-per-new-client = 3,
+    /// so new clients will, in groups of 10, be asked to ACK 3 FC_PING frames
+    /// each
+    #[clap(long = "fc-ping-new-clients-acks", default_value = "20")]
+    fc_ping_max_new_clients: u64,
+
+    /// Number of ACKs to FC_PING frames that each new client will be asked to
+    /// send.
+    #[clap(long = "fc-ping-acks-per-new-client", default_value = "3")]
+    fc_ping_acks_per_new_client: usize,
 
     // -------- FCQUIC BEACON Specific ---------
     /// interval between each file transfer in ms
@@ -212,9 +224,9 @@ async fn main() {
         crt_path: args.cert_path.clone(),
         fc_cca: args.fc_cwnd,
         ack_delay_latency: std::time::Duration::from_millis(args.ack_delay_latency),
-        fc_keepalive: args
-            .fc_keepalive
-            .map(|val| std::time::Duration::from_millis(val)),
+        fc_ping_interval: std::time::Duration::from_millis(args.fc_ping_interval),
+        fc_ping_max_new_clients: args.fc_ping_max_new_clients,
+        fc_ping_acks_per_new_client: args.fc_ping_acks_per_new_client,
         ..Default::default()
     };
 
@@ -325,7 +337,7 @@ async fn beacon_loop(
                     payload,
                 };
 
-                debug!("Sending {}", serde_json::to_string(&heartbeat).expect("Failed to serialize the heartbeat into a string"));
+                info!("Sending {}", serde_json::to_string(&heartbeat).expect("Failed to serialize the heartbeat into a string"));
                 let mut data = serde_json::to_vec(&heartbeat).expect("Failed to serialize the heartbeat!");
                 // then push the payload bytes to the vec
                 data.push(b'\n');

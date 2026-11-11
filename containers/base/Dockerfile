@@ -43,12 +43,12 @@ COPY --from=multicast-quic --exclude=*target* . /multicast-quic
 
 # compile everything, binaries are collected in /out
 RUN mkdir -p /out
-RUN cd multicast-quic && CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --release --target $(cat /rust-target) \
-    && cp target/$(cat /rust-target)/release/fc-flow-file-transfer \
-          target/$(cat /rust-target)/release/fc-recv-file-transfer /out/
+# RUN cd multicast-quic && CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --release --target $(cat /rust-target) \
+#     && cp target/$(cat /rust-target)/release/fc-flow-file-transfer \
+#           target/$(cat /rust-target)/release/fc-recv-file-transfer /out/
 RUN cd fcquic-beacon && CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --release --target $(cat /rust-target) \
-    && cp target/$(cat /rust-target)/release/source \
-          target/$(cat /rust-target)/release/receiver /out/
+    && cp target/$(cat /rust-target)/release/tfc-source \
+          target/$(cat /rust-target)/release/tfc-receiver /out/
 
 # runtime section, only keep the binaries and certs (this stage is the target arch)
 FROM debian:bookworm-slim
@@ -59,11 +59,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN mkdir -p /shared
 
-COPY --from=builder /out/source  /
-COPY --from=builder /out/receiver  /
+COPY --from=builder /out/tfc-source  /
+COPY --from=builder /out/tfc-receiver  /
 COPY --from=builder /fcquic-beacon/cert.crt /
 COPY --from=builder /fcquic-beacon/cert.key /
 
-# relay binaries
-COPY --from=builder /out/fc-flow-file-transfer  /
-COPY --from=builder /out/fc-recv-file-transfer  /
+# COPY --from=builder /out/fc-flow-file-transfer  /
+# COPY --from=builder /out/fc-recv-file-transfer  /

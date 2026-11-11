@@ -33,7 +33,7 @@ struct Args {
     /// Sets the initial flow control limits on the receiver.
     /// If this parameter is not set, the receiver uses unlimited flow control.
     #[clap(long = "flow-control")]
-    initial_flow_control: Option<u64>, 
+    initial_flow_control: Option<u64>,
 
     /// Whether the client is allowed to use AMT as a fallback mechanism to
     /// remain in the multicast group when in a non native multicsat network
@@ -52,8 +52,8 @@ struct Args {
     /// Must be well above the source's `--fc-keepalive` interval (~3x, e.g.,
     /// 750 for a 250 ms keepalive). Without a keepalive on the source, an idle
     /// flexicast flow triggers a spurious switch to AMT after this delay.
-    #[clap(long = "amt-fallback-delay", value_parser, default_value = "750")]
-    amt_fallback_delay: u64,
+    // #[clap(long = "amt-fallback-delay", value_parser, default_value = "750")]
+    // amt_fallback_delay: u64,
 
     // ----- FCQUIC specific arguments --------
     /// whether or not the hash of the payloads is checked
@@ -85,7 +85,6 @@ async fn main() {
         None,
         args.amt_fallback_allowed,
         args.amt_relay_ip,
-        args.amt_fallback_delay,
     );
 
     tokio::spawn(async move {
@@ -94,6 +93,11 @@ async fn main() {
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
         let mut closing = false;
+
+        let mut up_payload_bytes: u64 = 0;
+        let mut down_payload_bytes: u64 = 0;
+        let mut first_data: Option<tokio::time::Instant> = None;
+        let mut last_data: Option<tokio::time::Instant> = None;
 
         let mut streams: HashMap<u64, Vec<u8>> = HashMap::new();
 
@@ -125,6 +129,15 @@ async fn main() {
 
                                  // add the received data to the buffer
                                  map_buffer.extend_from_slice(&data);
+
+                                let n = data.len() as u64;
+                                if n > 0 {
+                                    let now = tokio::time::Instant::now();
+                                    first_data.get_or_insert(now);
+                                    last_data = Some(now);
+                                    up_payload_bytes += n;
+                                    down_payload_bytes += n;
+                                }
 
                                  // only consume the data from the buffer once the entire stream has been received
                                  if !fin {
@@ -217,6 +230,18 @@ async fn main() {
                          debug!("failed to send Close message: {:?}", e);
                          break;
                      }
+
+                    if let (Some(start), Some(end)) = (first_data, last_data) {
+                        let duration_sec = (end - start).as_secs_f64().max(1e-9);
+                        let down_mbps = (down_payload_bytes as f64) * 8.0 / duration_sec / 1_000_000.0;
+                        let up_mbps = (up_payload_bytes as f64) * 8.0 / duration_sec / 1_000_000.0;
+
+                        println!("RESULT-GOODPUT-PAYLOAD-UP-BYTES {}", up_payload_bytes);
+                        println!("RESULT-GOODPUT-PAYLOAD-DOWN-BYTES {}", down_payload_bytes);
+                        println!("RESULT-GOODPUT-PAYLOAD-DURATION-S {:.6}", duration_sec);
+                        println!("RESULT-GOODPUT-PAYLOAD-UP-MBPS {:.3}", up_mbps);
+                        println!("RESULT-GOODPUT-PAYLOAD-DOWN-MBPS {:.3}", down_mbps);
+                    }
 
                     closing = true;
 

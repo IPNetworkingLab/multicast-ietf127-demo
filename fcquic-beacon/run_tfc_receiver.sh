@@ -19,5 +19,5 @@ if [ -n "$AMT_RELAY" ]; then
     AMT_ARGS=(--amt-fallback --amt-relay "$AMT_RELAY")
 fi
 
-ip netns exec "$NS" env RUST_LOG=debug RUST_BACKTRACE=full "$TFC_RECEIVER" \
+ip netns exec "$NS" env RUST_LOG=trace RUST_BACKTRACE=full "$TFC_RECEIVER" \
     "https://$SRC_IP:4433/heartbeat" -l "$LOCAL_IP" --flexicast "${AMT_ARGS[@]}" "$@"

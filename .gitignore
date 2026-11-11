@@ -3,3 +3,6 @@ fcquic-beacon/bin-fcquic-client*/
 fcquic-beacon/fcquic-client*/
 fcquic-beacon/hb/
 fcquic-beacon/source-heartbeats/
+__pycache__/
+out/
+pcap/

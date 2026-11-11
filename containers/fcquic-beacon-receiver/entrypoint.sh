@@ -1,43 +1,34 @@
 #!/bin/bash
 
+# usage: entrypoint.sh SRC_IP [ID] [extra args are all passed to the binary...]
+# env vars: NS (optional network namespace), AMT_RELAY (defaults to 62.40.96.44 if not set)
 
-# # If NS is not set, then just run the binary as is
-# # otherwise run in the specified namespace
-# if [ -z "$NS" ]; then
-#     # No namespace specified
-#     /receiver $@
-# else
-#     # Run in specific namespace
-#     ip netns exec $NS /client $@
-# fi
+TFC_RECEIVER=/tfc-receiver
 
-
-RECEIVER_CLIENT=/receiver
-SOCK=/tmp/fcquic-recv.sock
 SRC_IP=$1
 ID=${2:-1}
-OUT_DIR=./bin-fcquic-client$ID
 
-mkdir -p "$OUT_DIR"
+# we want the remaining arguments to be given to the binary
+# so shift the remaining arguments 2 if 2 or more args are given (i.e. if both the src ip and id
+# were give, then shift left by 2 to allow anything that comes after to be handed with $@ to the binary)
+# if less than 2 were given, then shift by however many were given
+shift $(( $# < 2 ? $# : 2 ))
 
-# remove the previous run's files
-rm -f "$OUT_DIR"/heartbeat_*
-
-# the fcquic source will create an unbind socket and will send filename information to the beacon receiver binary by using its socket path (in $SOCK)
-# so we first delete any previous sock file
-rm -f "$SOCK"
-
-if [ -z "$NS" ]; then
-    RUST_LOG=trace RUST_BACKTRACE=full "/fc-recv-file-transfer" https://${SRC_IP}:4433/heartbeat \
-        -l 0.0.0.0 --flexicast --stay-open --transfer-kind "file,socket,$SOCK" --amt-fallback --amt-relay 62.40.96.44 > "$OUT_DIR/receiver.log" 2>&1 &
-else
-    ip netns exec $NS env RUST_LOG=debug RUST_BACKTRACE=full "/fc-recv-file-transfer" https://${SRC_IP}:4433/heartbeat \
-        -l 0.0.0.0 --flexicast --stay-open --transfer-kind "file,socket,$SOCK" --amt-fallback --amt-relay 62.40.96.44 > "$OUT_DIR/receiver.log" 2>&1 &
+if [ -z "$SRC_IP" ]; then
+    echo "usage: $0 SRC_IP [ID] [extra tfc-receiver args...]"
+    exit 1
 fi
-RECVR_PID=$!
 
-# kill the receiver when this script exits
-trap 'kill $RECVR_PID 2>/dev/null' EXIT
+AMT_RELAY=${AMT_RELAY:-62.40.96.44}
 
+NETNS=()
+if [ -n "$NS" ]; then
+    NETNS=(ip netns exec "$NS")
+fi
 
-RUST_LOG=debug "$RECEIVER_CLIENT" --socket-bind-path "$SOCK"
+echo "Starting receiver $ID towards $SRC_IP"
+
+# exec is used to pass signals directly (e.g., ctrl c)
+exec "${NETNS[@]}" env RUST_LOG="${RUST_LOG:-warn,tfc_receiver=info}" RUST_BACKTRACE=full "$TFC_RECEIVER" \
+    "https://$SRC_IP:4433/heartbeat" -l 0.0.0.0 --flexicast \
+    --amt-fallback --amt-relay "$AMT_RELAY" "$@"
