@@ -151,12 +151,12 @@ struct Args {
     /// Example: fc-ping-new-clients-acks = 10, fc-ping-acks-per-new-client = 3,
     /// so new clients will, in groups of 10, be asked to ACK 3 FC_PING frames
     /// each
-    #[clap(long = "fc-ping-new-clients-acks", default_value = "20")]
+    #[clap(long = "fc-ping-new-clients-acks", default_value = "250")]
     fc_ping_max_new_clients: u64,
 
     /// Number of ACKs to FC_PING frames that each new client will be asked to
     /// send.
-    #[clap(long = "fc-ping-acks-per-new-client", default_value = "3")]
+    #[clap(long = "fc-ping-acks-per-new-client", default_value = "30")]
     fc_ping_acks_per_new_client: usize,
 
     // -------- FCQUIC BEACON Specific ---------

@@ -3137,6 +3137,7 @@ dependencies = [
  "mio 0.8.11",
  "nix",
  "octets 0.3.0",
+ "qlog",
  "quiche",
  "ring",
  "slab",

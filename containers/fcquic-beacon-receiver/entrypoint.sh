@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # usage: entrypoint.sh SRC_IP [ID] [extra args are all passed to the binary...]
-# env vars: NS (optional network namespace), AMT_RELAY (defaults to 62.40.96.44 if not set), SRC_PORT (default 4433)
+# env vars: NS (optional network namespace), AMT_RELAY (defaults to 62.40.96.44 if not set), SRC_PORT (default 4433),
+# QLOGDIR (default /bin-fcquic-client$ID/qlogs, i.e. in the mounted volume, set it to an empty string to disable qlogs)
 
 TFC_RECEIVER=/tfc-receiver
 
@@ -22,6 +23,13 @@ fi
 AMT_RELAY=${AMT_RELAY:-62.40.96.44}
 SRC_PORT=${SRC_PORT:-4433}
 
+QLOGDIR=${QLOGDIR-/bin-fcquic-client$ID/qlogs}
+QLOG_ENV=()
+if [ -n "$QLOGDIR" ]; then
+    mkdir -p "$QLOGDIR"
+    QLOG_ENV=(QLOGDIR="$QLOGDIR")
+fi
+
 NETNS=()
 if [ -n "$NS" ]; then
     NETNS=(ip netns exec "$NS")
@@ -30,6 +38,6 @@ fi
 echo "Starting receiver $ID towards $SRC_IP:$SRC_PORT"
 
 # exec is used to pass signals directly (e.g., ctrl c)
-exec "${NETNS[@]}" env RUST_LOG="${RUST_LOG:-warn,tfc_receiver=info}" RUST_BACKTRACE=full "$TFC_RECEIVER" \
+exec "${NETNS[@]}" env "${QLOG_ENV[@]}" RUST_LOG="${RUST_LOG:-warn,tfc_receiver=info}" RUST_BACKTRACE=full "$TFC_RECEIVER" \
     "https://$SRC_IP:$SRC_PORT/heartbeat" -l 0.0.0.0 --flexicast \
     --amt-fallback --amt-relay "$AMT_RELAY" "$@"
