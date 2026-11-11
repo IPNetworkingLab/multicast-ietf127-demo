@@ -76,6 +76,21 @@ SOURCES = [
             "fcquic-recv1", r"tfc_receiver\] Heartbeat #", alert_pattern=r"\bERROR\b"
         ),
     ),
+    # FC_PING version of the beacon (the normal PING source is kept for the picoquic client)
+    Source(
+        name="fcquic-fcping",
+        start=Cmd(
+            "./run_fcquic_beacon_fcping.sh --send-interval 4000 --payload-every 5 --payload-size 100000",
+            cwd=REMOTE_DIR,
+            host="vm-geant-cron",
+        ),
+        receivers=[Cmd("./run_docker_recv_fcping.sh")],
+        check=Check(
+            "fcquic-recv-fcping",
+            r"tfc_receiver\] Heartbeat #",
+            alert_pattern=r"\bERROR\b",
+        ),
+    ),
     # Source(
     #     name="gpac",
     #     start=Cmd("./run_gpac_source.sh ...", cwd=REMOTE_DIR, host="vm-geant-cron"),

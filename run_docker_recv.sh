@@ -24,6 +24,6 @@ docker run -d --name "$NAME" --init --network host \
   --log-opt max-size=200m --log-opt max-file=10 \
   ${RUST_LOG:+-e RUST_LOG="$RUST_LOG"} \
   -v "$LOG_DIR:/bin-fcquic-client1" \
-  fcquic-beacon-receiver 193.191.171.131 1 "$@" || exit 1
+  fcquic-beacon-receiver:ping 193.191.171.131 1 "$@" || exit 1
 
 docker logs -f "$NAME"

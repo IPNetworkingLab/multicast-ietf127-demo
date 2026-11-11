@@ -20,6 +20,6 @@ docker run -d --name "$NAME" --init --network host \
   -e RUST_LOG="${RUST_LOG:-debug}" \
   -e SRC_IP=193.191.171.131 -e MC_SRC_IP=193.190.248.24 \
   -v "$LOG_DIR:/source-heartbeats" \
-  corentindetry/fcquic-beacon-source:latest "$@" || exit 1
+  corentindetry/fcquic-beacon-source:ping "$@" || exit 1
 
 docker logs -f "$NAME"

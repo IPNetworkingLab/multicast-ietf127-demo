@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# env vars: NS (optional network namespace), SRC_IP, MC_SRC_IP (defaults to SRC_IP)
+# env vars: NS (optional network namespace), SRC_IP, MC_SRC_IP (defaults to SRC_IP),
+# SRC_PORT (default 4433), MC_SRC_PORT (default 4443), FC_PING_INTERVAL (in ms, default 250)
 # NOTE: SRC_IP refers to the address that will be used by the source, e.g, this is the one clients connect to
 # MC_SRC_IP refers to the multicast source ip, this is different in the case where the multicast traffic exits
 # out of a GRE tunnel into a PIM-SSM network, otherwise it can be the same as SRC_IP
@@ -21,6 +22,10 @@ if [ -n "$NS" ]; then
     SRC_IP=${SRC_IP:-10.10.0.2}
 fi
 MC_SRC_IP=${MC_SRC_IP:-$SRC_IP}
+SRC_PORT=${SRC_PORT:-4433}
+MC_SRC_PORT=${MC_SRC_PORT:-4443}
+# receivers fall back to AMT after 3x this interval without multicast packets
+FC_PING_INTERVAL=${FC_PING_INTERVAL:-250}
 
 if [ -z "$SRC_IP" ]; then
     echo "SRC_IP must be set when not running in a network namespace"
@@ -29,6 +34,6 @@ fi
 
 # exec so that tfc-source receives the signals directly
 exec "${NETNS[@]}" env RUST_LOG="${RUST_LOG:-warn,tfc_source=info}" RUST_BACKTRACE=full "$TFC_SOURCE" \
-    --flexicast --unicast --src "$SRC_IP:4433" --mc-src-addr "$MC_SRC_IP:4443" --fc-timer 0 \
-    --fall-back-delay 1000 --initial-fc-flow 100000000000 --cert-path / --fc-keepalive 250 \
+    --flexicast --unicast --src "$SRC_IP:$SRC_PORT" --mc-src-addr "$MC_SRC_IP:$MC_SRC_PORT" --fc-timer 0 \
+    --fall-back-delay 1000 --initial-fc-flow 100000000000 --cert-path / --fc-ping-interval "$FC_PING_INTERVAL" \
     "$@"

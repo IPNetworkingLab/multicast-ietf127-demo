@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# stop at the first failed build, otherwise the next images are built on top of a stale base
+set -e
+
 SKIP_BUILDING_BASE=false
 ARCHS=("amd64" "arm64")
 while [[ $# -gt 0 ]]; do
