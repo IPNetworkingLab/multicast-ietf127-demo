@@ -2,7 +2,7 @@
 
 # usage: entrypoint.sh SRC_IP [ID] [extra args are all passed to the binary...]
 # env vars: NS (optional network namespace), AMT_RELAY (defaults to 62.40.96.44 if not set), SRC_PORT (default 4433),
-# QLOGDIR (default /bin-fcquic-client$ID/qlogs), QLOG_UPLOAD_URL (default http://SRC_IP:8080)
+# QLOGDIR (default /bin-fcquic-client$ID/qlogs), QLOG_UPLOAD_URL (default http://SRC_IP:8080/qlog)
 
 TFC_RECEIVER=/tfc-receiver
 
@@ -24,7 +24,7 @@ AMT_RELAY=${AMT_RELAY:-62.40.96.44}
 SRC_PORT=${SRC_PORT:-4433}
 
 QLOGDIR=${QLOGDIR-/bin-fcquic-client$ID/qlogs}
-QLOG_UPLOAD_URL=${QLOG_UPLOAD_URL:-http://$SRC_IP:8080}
+QLOG_UPLOAD_URL=${QLOG_UPLOAD_URL:-http://$SRC_IP:8080/qlog}
 QLOG_ENV=()
 if [ -n "$QLOGDIR" ]; then
     mkdir -p "$QLOGDIR"

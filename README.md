@@ -47,7 +47,7 @@ To run a flexicast QUIC receiver, or a source, you can use the provided images:
     - SRC_PORT: UC source port (default 4433, 4435 for the FC_PING source)
     - AMT_RELAY: AMT relay used for fallback when multicast doesn't work for the receiver (default 62.40.96.44)
     - QLOGDIR: directory where the qlogs are written (default /bin-fcquic-client$ID/qlogs). You can disable qlog collection by setting it to an empty string
-    - QLOG_UPLOAD_URL: where the qlogs are uploaded when the receiver stops (default http://SRC_IP:8080)
+    - QLOG_UPLOAD_URL: where the qlogs are uploaded when the receiver stops (default http://SRC_IP:8080/qlog)
   - Tags: `ping` for the PING source, `fcping` for the FC_PING source
     - There are two FCQUIC sources running, one with QUIC's PING frames sent on the multicast flow every 250ms, however this frame is ack-eliciting, which induces load on the source at high receiver counts. The FC_PING frame was therefore introduced, which is by default non ack-eliciting, but may carry information to identify a group of receivers that the sources wants to obtain ACKs for.
 
@@ -72,6 +72,7 @@ Every container is built for arm64 and amd64 and have been tested on Linux and M
 - `run_docker_fcquic_beacon_fcping.sh`: FC_PING source (port 4435, multicast on 239.239.239.36:4434)
 - `run_docker_recv.sh`: receiver for the PING source
 - `run_docker_recv_fcping.sh`: receiver for the FC_PING source, to run alongside run_docker_recv.sh
+- `run_qlog_server.sh`: qlog upload server, runs on the source VM (port 8080)
 - `run_docker_recv_netns.sh`, `run_docker_src_netns.sh`: receiver and source in local network namespaces, for tests
 
 

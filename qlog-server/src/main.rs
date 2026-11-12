@@ -30,7 +30,7 @@ async fn main() {
         .route("/", get(show_homepage))
         .route("/qlog/{file_name}", put(save_request_body));
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
         .unwrap();
     debug!("listening on http://{}", listener.local_addr().unwrap());
