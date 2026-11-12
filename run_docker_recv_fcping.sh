@@ -10,6 +10,8 @@ mkdir -p "$LOG_DIR"
 
 # save the logs of the previous run before removing its container
 if docker container inspect "$NAME" >/dev/null 2>&1; then
+  # let the receiver upload its qlogs
+  docker stop "$NAME" >/dev/null 2>&1
   PREV_LOG="$LOG_DIR/receiver-$(date +%Y%m%d-%H%M%S).log"
   echo "Saving the previous run's logs to $PREV_LOG"
   docker logs -t "$NAME" > "$PREV_LOG" 2>&1

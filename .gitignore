@@ -6,3 +6,6 @@ fcquic-beacon/source-heartbeats/
 __pycache__/
 out/
 pcap/
+qlog-server/target/
+fcquic-beacon/tfc-recv/qlogs/
+fcquic-beacon/tfc-source/

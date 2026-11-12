@@ -2,7 +2,7 @@
 
 # usage: entrypoint.sh SRC_IP [ID] [extra args are all passed to the binary...]
 # env vars: NS (optional network namespace), AMT_RELAY (defaults to 62.40.96.44 if not set), SRC_PORT (default 4433),
-# QLOGDIR (default /bin-fcquic-client$ID/qlogs, i.e. in the mounted volume, set it to an empty string to disable qlogs)
+# QLOGDIR (default /bin-fcquic-client$ID/qlogs), QLOG_UPLOAD_URL (default http://SRC_IP:8080)
 
 TFC_RECEIVER=/tfc-receiver
 
@@ -24,6 +24,7 @@ AMT_RELAY=${AMT_RELAY:-62.40.96.44}
 SRC_PORT=${SRC_PORT:-4433}
 
 QLOGDIR=${QLOGDIR-/bin-fcquic-client$ID/qlogs}
+QLOG_UPLOAD_URL=${QLOG_UPLOAD_URL:-http://$SRC_IP:8080}
 QLOG_ENV=()
 if [ -n "$QLOGDIR" ]; then
     mkdir -p "$QLOGDIR"
@@ -37,7 +38,18 @@ fi
 
 echo "Starting receiver $ID towards $SRC_IP:$SRC_PORT"
 
-# exec is used to pass signals directly (e.g., ctrl c)
-exec "${NETNS[@]}" env "${QLOG_ENV[@]}" RUST_LOG="${RUST_LOG:-warn,tfc_receiver=info}" RUST_BACKTRACE=full "$TFC_RECEIVER" \
+trap 'kill -INT $PID 2>/dev/null' INT TERM
+setsid "${NETNS[@]}" env --default-signal=INT "${QLOG_ENV[@]}" RUST_LOG="${RUST_LOG:-warn,tfc_receiver=info}" RUST_BACKTRACE=full "$TFC_RECEIVER" \
     "https://$SRC_IP:$SRC_PORT/heartbeat" -l 0.0.0.0 --flexicast \
-    --amt-fallback --amt-relay "$AMT_RELAY" "$@"
+    --amt-fallback --amt-relay "$AMT_RELAY" "$@" &
+PID=$!
+while kill -0 $PID 2>/dev/null; do wait $PID; done
+
+if [ -n "$QLOGDIR" ]; then
+    for f in "$QLOGDIR"/*.sqlog; do [ -f "$f" ] && gzip -f "$f"; done
+    for f in "$QLOGDIR"/*.sqlog.gz; do
+        # -f: fail on HTTP errors so the file isn't removed, -sS: no progress bar but still print errors
+        # -m 60: 60s timeout, -T: PUT the file, the trailing / makes curl append the filename to the URL
+        [ -f "$f" ] && curl -fsS -m 60 -T "$f" "$QLOG_UPLOAD_URL/" && rm "$f" && echo "Uploaded $f"
+    done
+fi
