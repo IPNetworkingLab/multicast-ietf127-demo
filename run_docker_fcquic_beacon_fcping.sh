@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# FC_PING version of the beacon, runs alongside the PING one (run_docker_fcquic_beacon.sh)
-# with its own ports and multicast group
-
 NAME=fcquic-source-fcping
 LOG_DIR="$PWD/out/source-fcping"
 mkdir -p "$LOG_DIR"

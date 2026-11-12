@@ -14,7 +14,9 @@ WORK_DIR=./tfc-source
 mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
-ip netns exec "$NS" env RUST_LOG=trace RUST_BACKTRACE=full SSLKEYLOGFILE="${SSLKEYLOGFILE:-$PWD/uc-keylog.txt}" "$TFC_SOURCE" \
+mkdir -p ./qlogs
+
+ip netns exec "$NS" env RUST_LOG=trace RUST_BACKTRACE=full SSLKEYLOGFILE="${SSLKEYLOGFILE:-$PWD/uc-keylog.txt}" QLOGDIR=$PWD/qlogs "$TFC_SOURCE" \
     --flexicast --unicast --src "$SRC_IP:4433" --mc-src-addr "$SRC_IP:4443" --fc-timer 0 \
     --fall-back-delay 1000 --initial-fc-flow 100000000000 --cert-path "$BEACON_DIR" --fc-ping-interval 750 \
     "$@"

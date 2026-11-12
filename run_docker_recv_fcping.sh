@@ -27,6 +27,6 @@ docker run -d --name "$NAME" --init --network host \
   ${RUST_LOG:+-e RUST_LOG="$RUST_LOG"} \
   -e SRC_PORT=4435 \
   -v "$LOG_DIR:/bin-fcquic-client1" \
-  fcquic-beacon-receiver:fcping 193.191.171.131 1 "$@" || exit 1
+  corentindetry/fcquic-beacon-receiver:fcping 193.191.171.131 1 "$@" || exit 1
 
 docker logs -f "$NAME"
