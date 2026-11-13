@@ -9,3 +9,5 @@ pcap/
 qlog-server/target/
 fcquic-beacon/tfc-recv/qlogs/
 fcquic-beacon/tfc-source/
+fcquic-demo-site/.astro/
+fcquic-demo-site/node_modules/

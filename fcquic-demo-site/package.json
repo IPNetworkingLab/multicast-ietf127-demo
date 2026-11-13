@@ -1,0 +1,13 @@
+{
+  "name": "fcquic-demo-site",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "astro dev --port 4000",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "type": "module",
+  "dependencies": {
+    "astro": "^7.4.5"
+  }
+}

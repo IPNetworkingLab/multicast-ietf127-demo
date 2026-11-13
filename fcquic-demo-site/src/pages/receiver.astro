@@ -1,0 +1,90 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Run a receiver">
+    <h1>Run a receiver</h1>
+    <p>
+        To run a receiver and join the demo, you only need docker installed. The
+        receiver connects to the Flexicast source (
+        <code>193.191.171.131:4435</code>) and receives heartbeats over
+        multicast. If the receiver notices it isn't receiving multicast data
+        natively, it will fallback on AMT.
+    </p>
+
+    <h2>Requirements</h2>
+    <ul>
+        <li>
+            Docker, the container is built for arm64 and amd64 and has been
+            tested on Linux and MacOS (27.2.1)
+        </li>
+        <li>
+            Outbound UDP connectivity to the source (193.191.171.131:4435) and
+            to the AMT relays (62.40.96.44:2268), and TCP 8080 to the source for
+            the QLOG upload. NOTE: Some university networks may block QUIC
+            connections, in which case you might have to try from a residential
+            network. Do keep in mind that the IP addresses of the receivers are
+            stored, but will not be shared with anyone and will only be used for
+            data analysis.
+        </li>
+    </ul>
+
+    <h2>Start the container</h2>
+    <pre><code>docker run --rm -it --init --network host --pull always \
+  -e RUST_LOG=info -e SRC_PORT=4435 \
+  corentindetry/fcquic-beacon-receiver:fcping 193.191.171.131 1</code></pre>
+    <p>
+        Or clone the{" "}
+        <a href="https://github.com/IPNetworkingLab/multicast-ietf127-demo">
+            repo
+        </a>{" "}
+        and run <code>./run_demo.sh</code>, which simply runs the same
+        container. Extra arguments are passed to the receiver binary, e.g.
+        <code>./run_demo.sh --pretty-print false</code>.
+    </p>
+    <p>
+        To obtain more information, you can run the script with{" "}
+        <code>RUST_LOG</code> set to <code>info</code> or <code>debug</code>.
+    </p>
+    <p>
+        Use ctrl-c to stop the receiver. When the container is stopping, the
+        QLOGs of the connection are sent over to our source server for analysis.
+        You can disable qlog collection by setting
+        <code>QLOGDIR</code> to an empty string (<code>-e QLOGDIR=</code>).
+    </p>
+
+    <h2>What you receive</h2>
+    <p>
+        Each heartbeat is a JSON message containing a session id, sequence
+        number, timestamp, and interval,... Heartbeats are sent every 4 seconds,
+        and every 5th heartbeat also carries a random 100 kilobytes payload, the
+        sha256 hash of the payload is sent in the heartbeat to check integrity.
+    </p>
+
+    <h2>Check that it works</h2>
+    <p>
+        You should receive heartbeats within a few seconds. If the receiver
+        fallsback to AMT, you should see the line{" "}
+        <code>Left MULTICAST group 239.239.239.36</code>, or when running the
+        receiver with <code>env RUST_LOG=info</code>, you should see a line{" "}
+        <code>Left multicast group after creating AMT gateway</code>.
+    </p>
+
+    <h2>Data we collect</h2>
+    <p>We will collect the following information about the connection:</p>
+    <ul>
+        <li>Non-anonymized IP address</li>
+        <li>
+            Complete session logs, QLOGs include all packets sent and received
+            by the client at the transport level.
+        </li>
+        <li>AMT, Unicast fallback events</li>
+        <li>Retransmissions,...</li>
+    </ul>
+    <p>
+        This information will only be used for research purposes, and will allow
+        us to improve our Flexicast QUIC implementation, find new potential
+        issues, and gain insights only attainable from real deployments. TODO:
+        retention period and contact.
+    </p>
+</Base>

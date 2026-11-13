@@ -6,6 +6,14 @@ To run a receiver and join the demo, you only need docker installed, then run th
 ```
 ./run_demo.sh
 ```
+Or simply
+
+```docker
+docker run --rm -it --init --network host --pull always \
+  -e RUST_LOG=info -e SRC_PORT=4435 \
+  corentindetry/fcquic-beacon-receiver:fcping 193.191.171.131 1 "$@"
+```
+
 This script simply runs the `corentindetry/fcquic-beacon-receiver:fcping` container (whose entrypoint script is [fcquic-beacon-receiver/entrypoint.sh](./containers/fcquic-beacon-receiver/entrypoint.sh)).
 Extra arguments are passed to the receiver binary [`tfc-receiver.rs`](fcquic-beacon/src/bin/tfc-receiver.rs), e.g. `./run_demo.sh --pretty-print false`.
 
@@ -35,6 +43,12 @@ Our demonstration makes use of these relays to provide client initiated multicas
 
 The AMT relays in the GEANT network all advertise the Anycast address `62.40.96.44`.
 
+
+### Wireshark support
+
+A modified version of Wireshark, made by Ambroise Sirven (resowifix) and available [here](https://gitlab.com/resowifix/wireshark/-/tree/flexicast?ref_type=heads), allows you to capture Flexicast QUIC traces and analyze the frames. In order to unencrypt the communications, you must run the receiver with `SSLKEYLOG` set to the output directory of the SSL keylog file. Set the keylog file path in wireshark's preferences -> "Protocols" -> "TLS" ->" (Pre)-Master-Secret log filename".
+
+This build of wireshark has been tested on Linux and MacOS.
 
 ## FCQUIC-Beacon
 

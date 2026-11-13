@@ -1,0 +1,212 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+
+const posts = (await getCollection("blog"))
+    .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+    .slice(0, 5);
+---
+
+<Base>
+    <h1>Flexicast QUIC over a real network</h1>
+    <p>
+        We are running a demonstration of{" "}
+        <strong>Flexicast QUIC (FCQUIC)</strong>
+        <sup>
+            <a href="#ref-1">[1]</a>
+        </sup>
+        , an extension of QUIC and Multipath QUIC that allows one source to
+        deliver the same content to many receivers over multicast, and fall back
+        to unicast for receivers that in unicast only networks. The source run
+        in the UCLouvain network, and is connected to the GEANT network through
+        Belnet. GEANT has native multicast connectivity, but also provides AMT
+        relays, which allows clients in non multicast networks to setup AMT
+        tunnels and receive multicast content by relying on replication on the
+        relay. Run a receiver by{" "}
+        <a href="/receiver">following the instructions</a> to help us gather
+        insights into Flexicast QUIC deployments over real networks.
+    </p>
+
+    <h2>Why</h2>
+    <p>
+        Interest in IP multicast is rising again, largely surrounding massive
+        video live streaming, file downloads (such as video games){" "}
+        <sup>
+            <a href="#ref-2">[2]</a>
+        </sup>
+        <sup>
+            <a href="#ref-3">[3]</a>
+        </sup>
+        , and uses in AI datacenters
+        <sup>
+            <a href="#ref-4">[4]</a>
+        </sup>
+        . IP multicast saves a lot of bandwidth when many receivers want the
+        same data, but inter-domain deployments suffered from pricing and
+        deployment difficulties. Existing reliable multicast transports assume
+        an all or nothing scenario, wherein an application either transmits all
+        of its content over multicast, or none at all. The{" "}
+        <em>chicken-or-the-egg </em>
+        problem has also plagued multicast deployments, where large scale
+        multicast deployments do not exist due to the lack of applications
+        requiring it, which in turn never develop due to the lack of usable
+        deployments
+        <sup>
+            <a href="#ref-5">[5]</a>
+        </sup>
+        .
+    </p>
+    <p>
+        Flexicast QUIC attempts to solve this issue by relying on multicast as
+        the main transfer channel, but also using unicast connections for
+        retransmissions, control messages, and as a backup transfer channel for
+        receivers in non multicast networks. This demo goes a little bit
+        further, we extended FCQUIC to support fallback to AMT tunnels, which
+        handle tunnel creation and byte replication on the relay. This allows
+        the source to send its data once to a group of receivers whose reception
+        mode may either be multicast or unicast through AMT tunnels. Several AMT
+        relays are located in the GEANT network, so native multicast replication
+        is still happening inside of the network whenever clients from different
+        regions connect to the source.
+    </p>
+    <h2>How it works</h2>
+    <ul>
+        <li>
+            Each receiver opens a normal, encrypted{" "}
+            <strong>QUIC connection</strong> to the source. This unicast path
+            carries control traffic, acknowledgements and retransmissions.
+        </li>
+        <li>
+            The source announces a shared <strong>multicast flow</strong> using
+            a frame called <code>FC_ANNOUNCE</code>. The receiver then tries to
+            join the source-specific multicast (SSM) group, and if the join
+            succeeds, gets the data efficiently.
+        </li>
+        <li>
+            Receivers acknowledge multicast packets on their own unicast path
+            with the source. The source retransmits lost packets over unicast
+            when a few receivers lost them, or over the flexicast flow when many
+            did (though the latter is not currently implemented).
+        </li>
+        <li>
+            When the multicast flow is idle, the source transmits{" "}
+            <code>FC_PING</code> frames over it, so that receivers can detect
+            broken or non functional multicast connectivity. The interval at
+            which these frames are sent is announced in the{" "}
+            <code>FC_ANNOUNCE</code> frame, and receivers set the threshold for
+            broken multicat connectivity at three times this interval.
+        </li>
+        <li>
+            If multicast packets never arrive after a join, or stop, the
+            receiver opens an
+            <strong> AMT tunnel</strong> (Automatic Multicast Tunneling{" "}
+            <a href="https://datatracker.ietf.org/doc/html/rfc7450">RFC7450</a>)
+            to an AMT relay in the GEANT network, which allows it to receive the
+            multicast packets from the GEANT network, encapsulated in UDP.
+        </li>
+    </ul>
+
+    <h2>The demo</h2>
+    <h3>Source</h3>
+    <p>
+        The source server is located in the UCLouvain network, connected via a
+        GRE tunnel to Belnet, the belgian education network operator, which has
+        multicast connectivity with the GEANT network.
+    </p>
+    <p>
+        There are two FCQUIC sources running, one with QUIC's PING frames sent
+        on the multicast flow every 250ms, however this frame is ack-eliciting,
+        which induces load on the source at high receiver counts. The
+        <code>FC_PING</code> frame was therefore introduced, which is by default
+        non ack-eliciting, but may carry information to identify a group of
+        receivers that the sources wants to obtain ACKs for. The demo receiver
+        uses the <code>FC_PING</code> source. But you may run the PING receiver
+        with the <code>:ping</code> tag. The picoquic container will also
+        connect to the PING source.
+    </p>
+
+    <h3>Multicast fallback for receivers in non multicast networks</h3>
+    <p>
+        Multicast connectivity with the GEANT network is possible at
+        universities in Europe, but is unlikely in most case. Thankfully, GEANT
+        has a set of AMT (Automatic Multicast Tunneling{" "}
+        <a href="https://datatracker.ietf.org/doc/html/rfc7450">RFC7450</a>)
+        Relays that enable clients in non-multicast networks to create on-demand
+        unicast tunnels to receive multicast content.
+    </p>
+    <p>
+        Our demonstration makes use of these relays to provide client initiated
+        multicast fallback to AMT if the client notices it isn't receiving
+        multicast data natively. This is parallel to the unicast fallback
+        offered by Flexicast QUIC, in which a client that doesn't meet the
+        group's minimum network quality is evicted and receives content through
+        unicast only. This unicast fallback is also applicable for clients in
+        non multicast network, but the latter use case not in use in this
+        demonstration in order for the source to distribute all of its content
+        via multicast, and rely on the network to reach clients, wherever they
+        are.
+    </p>
+    <p>
+        The AMT relays in the GEANT network all advertise the Anycast address
+        <code>62.40.96.44</code>.
+    </p>
+
+    <p>
+        <a href="/receiver">Run a receiver</a>
+    </p>
+
+    <h2>Latest updates</h2>
+    <ul>
+        {posts.map((post) => (
+            <li>
+                <a href={`/blog/${post.id}`}>{post.data.title}</a>{" "}
+                <span class="muted">
+                    {post.data.date.toISOString().slice(0, 10)}
+                </span>
+            </li>
+        ))}
+    </ul>
+
+    <h2>References</h2>
+    <ol class="muted">
+        <li id="ref-1">
+            L. Navarre, Q. De Coninck, T. Barbette, and O. Bonaventure, “
+            <a href="https://doi.org/10.1145/3750832.3750834">
+                Taking the Best of Multicast and Unicast with Flexicast QUIC
+            </a>
+            ,” SIGCOMM Comput. Commun. Rev., vol. 55, no. 2, pp. 2–12, Jul.
+            2025.
+        </li>
+        <li id="ref-2">
+            McGill, “
+            <a href="https://datatracker.ietf.org/meeting/124/materials/slides-124-mops-side-mtg-using-multicast-for-large-scale-live-streaming-over-the-internet-01">
+                Using multicast for large-scale live streaming over the Internet
+            </a>
+            ,” IETF 124 MOPS side meeting, 2025.
+        </li>
+        <li id="ref-3">
+            S. A. (BT), “
+            <a href="https://datatracker.ietf.org/meeting/123/materials/slides-123-mops-multicast-assisted-unicast-delivery-maud-introduction-00.pdf">
+                Multicast-assisted unicast delivery
+            </a>
+            ,” IETF 123 MOPS, 2025.
+        </li>
+        <li id="ref-4">
+            J. Zhang, W. Cheng, and K. Liu, “
+            <a href="https://datatracker.ietf.org/doc/draft-zhang-rtgwg-multicast-requirements-gaps-aidc/01/">
+                Requirements and Gap Analysis of Multicast in AI Data Centers
+            </a>
+            ,” Internet-Draft
+            draft-zhang-rtgwg-multicast-requirements-gaps-aidc-01, Mar. 2026,
+            work in progress.
+        </li>
+        <li id="ref-5">
+            L. Navarre and O. Bonaventure, “
+            <a href="https://doi.org/10.1145/3744969.3748403">
+                Towards an Internet Deployment of Flexible Multicast QUIC
+            </a>
+            ,” in Proc. ACM SIGCOMM 2025 Posters and Demos, Coimbra, Portugal,
+            Sep. 2025, pp. 137–139.
+        </li>
+    </ol>
+</Base>
