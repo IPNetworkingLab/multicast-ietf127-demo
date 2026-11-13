@@ -1,4 +1,8 @@
-# multicast-ietf127-demo
+# Flexicast QUIC Demonstration over a real multicast network
+
+Website: [https://flexicasting.org/](https://flexicasting.org/)
+
+INL Website: [https://inl.info.ucl.ac.be/](https://inl.info.ucl.ac.be/)
 
 ## Running the demo
 
