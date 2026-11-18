@@ -1,16 +1,20 @@
 #![allow(dead_code)] // fields are only read through Debug for now
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap},
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
     str::FromStr,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 
 use log::{debug, error, info, trace};
-use qlog::Bytes;
+use qlog_parser::{
+    AmtTunnelUpdate, ClientStateUpdate, ConnMetrics, FallBackUpdate, FcFlowCwnd, ReceivedStream,
+    ReceptionModeUpdate, RetransmissionEvent, RttSample, ServerUcRetransmission, StartupPhases,
+    between, event_system_time, f64_epoch_to_system_time,
+};
 use rayon::prelude::*;
 use regex::Regex;
 
@@ -29,136 +33,47 @@ fn read_qlog_dir(qlog_dir: &Path) -> (HashMap<String, ClientLog>, HashMap<String
     let mut logs_map = HashMap::new();
     let mut fc_flow_qlogs_map = HashMap::new();
 
-    for entry in qlog_dir.read_dir().expect("Failed to read qlog dir") {
-        if let Ok(entry) = entry {
-            let filename = entry.file_name();
-            let log_name = filename.to_str().unwrap();
+    for entry in qlog_dir
+        .read_dir()
+        .expect("Failed to read qlog dir")
+        .flatten()
+    {
+        // if let Ok(entry) = entry {
+        let filename = entry.file_name();
+        let log_name = filename.to_str().unwrap();
 
-            // unicast qlogs
-            if let Some(c) = re.captures(log_name) {
-                let (role, dcid) = (&c[1], &c[2]);
+        // unicast qlogs
+        if let Some(c) = re.captures(log_name) {
+            let (role, dcid) = (&c[1], &c[2]);
 
-                debug!("role={role}, dcid={dcid}");
+            debug!("role={role}, dcid={dcid}");
 
-                let map_entry = logs_map.entry(dcid.to_string()).or_insert(ClientLog {
-                    client_log_filename: None,
-                    server_log_filename: None,
-                });
-                match role {
-                    "client" => {
-                        map_entry.client_log_filename = Some(entry.path());
-                    }
-                    "server-server" => {
-                        map_entry.server_log_filename = Some(entry.path());
-                    }
-                    _ => (),
+            let map_entry = logs_map.entry(dcid.to_string()).or_insert(ClientLog {
+                client_log_filename: None,
+                server_log_filename: None,
+            });
+            match role {
+                "client" => {
+                    map_entry.client_log_filename = Some(entry.path());
                 }
-            }
-
-            // mc flow qlog
-            if let Some(capture) = fc_flow_qlogs_re.captures(log_name) {
-                let channel_id = &capture[1];
-                debug!(
-                    "Multicast flow qlog file '{log_name}' for client with channel_id={channel_id:?}"
-                );
-                fc_flow_qlogs_map.insert(channel_id.to_string(), entry.path());
+                "server-server" => {
+                    map_entry.server_log_filename = Some(entry.path());
+                }
+                _ => (),
             }
         }
+
+        // mc flow qlog
+        if let Some(capture) = fc_flow_qlogs_re.captures(log_name) {
+            let channel_id = &capture[1];
+            debug!(
+                "Multicast flow qlog file '{log_name}' for client with channel_id={channel_id:?}"
+            );
+            fc_flow_qlogs_map.insert(channel_id.to_string(), entry.path());
+        }
     }
+    // }
     (logs_map, fc_flow_qlogs_map)
-}
-
-/// ts is a timestamp in milliseconds since unix epoch
-fn f64_epoch_to_system_time(ts: f64) -> SystemTime {
-    UNIX_EPOCH + Duration::from_secs_f64(ts / 1000.0)
-}
-
-/// obtain the systemtime for a qlog event, based off of the reference time
-fn event_system_time(ref_time: SystemTime, offset_ms: f32) -> SystemTime {
-    ref_time + Duration::from_secs_f64(offset_ms as f64 / 1000.0)
-}
-
-#[derive(Debug)]
-struct RttSample {
-    time: SystemTime,
-    latest_ms: f32,
-    smoothed_ms: Option<f32>,
-}
-
-#[derive(Debug)]
-struct ReceptionModeUpdate {
-    time: SystemTime,
-    old_mode: Option<qlog::events::flexicast::ReceptionMode>,
-    new_mode: qlog::events::flexicast::ReceptionMode,
-    trigger: Option<qlog::events::flexicast::ReceptionModeTrigger>,
-}
-
-#[derive(Debug)]
-struct AmtTunnelUpdate {
-    time: SystemTime,
-    old: Option<qlog::events::flexicast::AmtTunnelState>,
-    new: qlog::events::flexicast::AmtTunnelState,
-    trigger: Option<qlog::events::flexicast::AmtTunnelTrigger>,
-
-    relay_ip: Option<String>,
-    source_ip: Option<String>,
-    group_ip: Option<String>,
-}
-
-#[derive(Debug)]
-struct ClientStateUpdate {
-    time: SystemTime,
-    channel_id: Option<Bytes>,
-    /// client id from MC_KEY
-    client_id: Option<u64>,
-
-    old: Option<qlog::events::flexicast::ClientState>,
-    new: qlog::events::flexicast::ClientState,
-}
-
-/// client fallback from the server's point of view
-#[derive(Debug)]
-struct FallBackUpdate {
-    time: SystemTime,
-    client_id: Option<u64>,
-    flow_id: Option<u64>,
-    action: qlog::events::flexicast::FallbackAction,
-    trigger: Option<qlog::events::flexicast::FallbackTrigger>,
-
-    /// smoothed RTT, in ms.
-    receiver_rtt: Option<f32>,
-    /// ref RTT that this receiver's rtt was compared against (in ms)
-    reference_rtt: Option<f32>,
-    gain_ratio: Option<f32>,
-}
-
-/// this event logs a retransmitted stream frame, which could either be duplicated (i.e., we had already received those bytes)
-/// or the og frame was lost and the retransmitted frame had a higher offset than we expected
-#[derive(Debug)]
-struct RetransmissionEvent {
-    time: SystemTime,
-    /// packet carrying the retransmission, unicast and fc flow have separate pn spaces (both can start near 0)
-    packet_number: Option<u64>,
-    /// whether that packet came over multicast/AMT, None for qlogs from receivers before the from_mc field
-    from_mc: Option<bool>,
-    stream_id: u64,
-    offset: u64,
-    length: u64,
-    /// true if all the bytes had already been received, i.e., a spurious retransmission
-    duplicate: bool,
-}
-
-/// what the client received so far on a stream
-#[derive(Debug, Default)]
-struct ReceivedStream {
-    /// merged received byte ranges {start: end}
-    ranges: BTreeMap<u64, u64>,
-    /// highest packet number that carried data of this stream
-    max_pn: Option<u64>,
-    /// when the first frame of this stream was received
-    first_frame_time: Option<SystemTime>,
-    /// offset + length of the fin frame, i.e., the stream size, None once it's fully delivered to the application
-    final_size: Option<u64>,
 }
 
 /// Check for a range of bytes received for a specific stream if the newly received frame (based on the offset and length) is duplicated or not
@@ -202,11 +117,11 @@ fn record_stream_frame(
 
     // insert [offset, end) and merge it with any ranges it touches
     let (mut curr_start, mut curr_end) = (offset, end);
-    if let Some((&prev_start, &prev_end)) = ranges.range(..=curr_start).next_back() {
-        if prev_end >= curr_start {
-            curr_start = prev_start;
-            curr_end = curr_end.max(prev_end);
-        }
+    if let Some((&prev_start, &prev_end)) = ranges.range(..=curr_start).next_back()
+        && prev_end >= curr_start
+    {
+        curr_start = prev_start;
+        curr_end = curr_end.max(prev_end);
     }
     let touched: Vec<u64> = ranges
         .range(curr_start..=curr_end)
@@ -218,99 +133,6 @@ fn record_stream_frame(
     ranges.insert(curr_start, curr_end);
 
     retransmitted.then_some(duplicate)
-}
-
-/// compute the duration between two optional systemtime, None if either is missing, or if time b came before time a
-fn between(a: Option<SystemTime>, b: Option<SystemTime>) -> Option<Duration> {
-    a.zip(b).and_then(|(a, b)| b.duration_since(a).ok())
-}
-
-#[derive(Debug)]
-struct StartupPhases {
-    /// time between the connection_start event to the mc join event
-    start_to_mc_join: Option<Duration>,
-    /// time between the mc join to the mc timeout, None if the amt fallback timer never expires
-    join_to_mc_timeout: Option<Duration>,
-    /// time between the amt opening event and amt opened events: the time it took for the amt tunnel to be established
-    amt_opening_to_opened: Option<Duration>,
-    /// time between the amt opened event (amt tunnel established) and the first packet received over this tunnel
-    amt_opened_to_first_amt_pkt: Option<Duration>,
-    /// time between the first amt packet received and the first stream frame received
-    amt_first_packet_to_first_stream_frm: Option<Duration>,
-}
-
-#[derive(Debug)]
-struct ServerUcRetransmission {
-    time: SystemTime,
-    stream_id: u64,
-    length: u64,
-}
-
-#[derive(Debug)]
-struct FcFlowCwnd {
-    time: SystemTime,
-    congestion_window: u64,
-}
-
-#[derive(Debug)]
-struct ConnMetrics {
-    /// client ip, it will be filled in by the server if the client's own src ip is 0.0.0.0
-    client_ip: Option<std::net::Ipv4Addr>,
-    /// true for the always connected receiver on the dev vm (130.104.229.33), i.e., not a real tester
-    is_persistent_client: bool,
-    /// client's connection_started time
-    conn_open_time: Option<SystemTime>,
-    /// reason from the client's connection_closed event
-    conn_close_reason: Option<String>,
-    /// client's connection_closed time, None if the qlog ended without a close
-    conn_close_time: Option<SystemTime>,
-    /// client rtt samples, on the unicast path only
-    rtt_samples: Vec<RttSample>,
-    /// client reception mode changes (unicast/multicast/amt)
-    reception_mode_updates: Vec<ReceptionModeUpdate>,
-    /// client amt tunnel state changes
-    amt_tunnel_updates: Vec<AmtTunnelUpdate>,
-    /// client state update from the client's pov
-    client_state_updates: Vec<ClientStateUpdate>,
-    /// client state updates from the server's point of view
-    server_pov_client_state_updates: Vec<ClientStateUpdate>,
-    /// server-side fallbacks of this client to unicast (not the amt fallback)
-    fallback_updates: Vec<FallBackUpdate>,
-    /// retransmissions received by the client, from the client qlog
-    retransmission_events: Vec<RetransmissionEvent>,
-    /// gaps in the from_mc packet numbers seen by the client, 0 for old qlogs without from_mc
-    multicast_losses: u64,
-    /// packets received by the client with from_mc, 0 for old qlogs without from_mc
-    total_multicast_packets: u64,
-    /// multicast_losses / (received + lost), None if no from_mc packet was seen
-    mcast_loss_rate: Option<f64>,
-    /// multicast losses from the server's pov (gaps in the fc flow packets acked by the client), also works for old qlogs without from_mc
-    server_pov_multicast_losses: Option<u64>,
-    /// server_pov_multicast_losses / span of acked fc flow packet numbers
-    server_pov_mcast_loss_rate: Option<f64>,
-    /// raw bytes of all packets received by the client, unicast and multicast
-    client_received_bytes: u64,
-    /// raw bytes of all packets sent by the client
-    client_sent_bytes: u64,
-    /// connection_started to the first stream frame received, over unicast or multicast
-    time_to_first_data: Option<Duration>,
-    /// breakdown of the startup up to the first stream frame
-    startup_phases: StartupPhases,
-    /// gaps between consecutive multicast packets longer than 1.5 fc_ping intervals
-    large_mc_packet_gaps: Vec<Duration>,
-    /// first frame to fully read by the app, for streams over 1350 bytes (heartbeats with the payload)
-    payload_app_latency: Vec<Duration>,
-    /// same as payload_app_latency, for streams under 1350 bytes (plain heartbeats)
-    no_payload_app_latency: Vec<Duration>,
-    /// stream frames the server sent on the unicast path, i.e., repairs of multicast data
-    server_uc_retransmissions: Vec<ServerUcRetransmission>,
-    /// fc flow congestion window over time, from the server's fc flow qlog (shared by all clients of the channel)
-    fc_flow_cwnd: Vec<FcFlowCwnd>,
-    /// fc flow rtt samples
-    fc_flow_rtt_samples: Vec<RttSample>,
-    /// multicast flow one way latency, based on the sent times on the fc flow and this receiver's received time
-    /// the durations are options since the client's clock may be slightly behind the source (which would potentially result in a negative duration...)
-    fc_flow_one_way_latency: Vec<Option<Duration>>,
 }
 
 fn parse_server_uc_events(
@@ -549,9 +371,6 @@ fn parse_client_conn(
                                     Some(event_system_time(client_ref_time, qlog_event.time));
                                 closed_reason = connection_closed.reason;
                             }
-                            // qlog::events::EventData::TransportParametersSet(transport_parameters_set) => {
-                            //     todo!()
-                            // }
                             qlog::events::EventData::PacketReceived(packet_received) => {
                                 let event_time =
                                     event_system_time(client_ref_time, qlog_event.time);
@@ -743,7 +562,7 @@ fn parse_client_conn(
                                     event_system_time(client_ref_time, qlog_event.time);
 
                                 // if the client was not previously using amt, but is now opening the tunnel, log the opening time as now
-                                if amt_tunnel_updated.old == None
+                                if amt_tunnel_updated.old.is_none()
                                     && amt_tunnel_updated.new
                                         == qlog::events::flexicast::AmtTunnelState::Opening
                                 {
@@ -829,7 +648,6 @@ fn parse_client_conn(
             qlog::reader::Event::Qlog(qlog_event) => {
                 trace!("server fc flow event: {qlog_event:?}");
                 match qlog_event.data {
-                    // TODO: track congestion window growth from here!
                     qlog::events::EventData::MetricsUpdated(metrics_updated) => {
                         if let Some(cwnd) = metrics_updated.congestion_window {
                             fc_flow_cwnd.push(FcFlowCwnd {
