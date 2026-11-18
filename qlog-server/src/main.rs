@@ -61,6 +61,7 @@ async fn show_homepage() -> Html<&'static str> {
             <body>
                 <h1>Flexicast QUIC source demo</h1>
                 <p>This server is running two FCQUIC sources, see <a href="https://github.com/IPNetworkingLab/multicast-ietf127-demo">https://github.com/IPNetworkingLab/multicast-ietf127-demo</a>for more information</p>
+                <p>Website: <a href="https://flexicasting.org">flexicasting.org</a></p>
             </body>
         </html>
         "#,

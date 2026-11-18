@@ -11,3 +11,8 @@ fcquic-beacon/tfc-recv/qlogs/
 fcquic-beacon/tfc-source/
 fcquic-demo-site/.astro/
 fcquic-demo-site/node_modules/
+fcquic-demo-site/dist/
+qlog-parser/target/
+qlog-parser/qlogs/
+qlog-parser/without_from_mc_client-Client-0.0.0.0-d03e67451532f1db2cbdf94e044fade1.sqlog
+qlog-parser/with_from_mc_client-Client-0.0.0.0-85b0522f4682656d28263484b0cbe656.sqlog
