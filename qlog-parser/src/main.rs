@@ -1,22 +1,33 @@
-#![allow(dead_code)] // fields are only read through Debug for now
-
+use clap::Parser;
+use log::{debug, error, info, trace};
+use qlog_parser::{
+    AmtTunnelUpdate, ClientStateUpdate, ConnMetrics, FallBackUpdate, FcFlowCwnd, FcFlowOneWayDelay,
+    ReceivedStream, ReceptionModeUpdate, RetransmissionEvent, RttSample, ServerUcRetransmission,
+    StartupPhases, between, event_system_time, f64_epoch_to_system_time,
+};
+use rayon::prelude::*;
+use regex::Regex;
 use std::{
     collections::{BTreeSet, HashMap},
     fs::File,
-    io::BufReader,
+    io::{BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     str::FromStr,
     time::{Duration, SystemTime},
 };
 
-use log::{debug, error, info, trace};
-use qlog_parser::{
-    AmtTunnelUpdate, ClientStateUpdate, ConnMetrics, FallBackUpdate, FcFlowCwnd, ReceivedStream,
-    ReceptionModeUpdate, RetransmissionEvent, RttSample, ServerUcRetransmission, StartupPhases,
-    between, event_system_time, f64_epoch_to_system_time,
-};
-use rayon::prelude::*;
-use regex::Regex;
+#[derive(Parser)]
+struct Args {
+    /// output path for the json files
+    out_path: String,
+
+    #[clap(long = "in-path", default_value = "./qlogs")]
+    in_path: String,
+
+    /// Optional: specify a client's DCID to only parse that client connection
+    #[clap(long = "dcid")]
+    specific_dcid: Option<String>,
+}
 
 #[derive(Debug)]
 struct ClientLog {
@@ -142,7 +153,7 @@ fn parse_server_uc_events(
     server_acked_mc_pns: &mut BTreeSet<u64>,
     server_pov_client_state_updates: &mut Vec<ClientStateUpdate>,
     fallback_updates: &mut Vec<FallBackUpdate>,
-    server_uc_retranmissions: &mut Vec<ServerUcRetransmission>,
+    server_uc_retransmissions: &mut Vec<ServerUcRetransmission>,
 ) -> Option<std::net::Ipv4Addr> {
     let mut client_src_ip: Option<std::net::Ipv4Addr> = None;
 
@@ -195,7 +206,7 @@ fn parse_server_uc_events(
                                 stream_id, length, ..
                             } = frame
                             {
-                                server_uc_retranmissions.push(ServerUcRetransmission {
+                                server_uc_retransmissions.push(ServerUcRetransmission {
                                     time: event_system_time(server_ref_time, qlog_event.time),
                                     stream_id: *stream_id,
                                     length: *length,
@@ -320,7 +331,7 @@ fn parse_client_conn(
     let mut mc_packet_received_times: Vec<SystemTime> = Vec::with_capacity(500);
 
     // one way mc packet delay, is an option if the client's clock is not properly synced with the source, it might be behind slightly,...
-    let mut mc_one_way_delays: Vec<Option<Duration>> = Vec::with_capacity(500);
+    let mut mc_one_way_delays: Vec<FcFlowOneWayDelay> = Vec::with_capacity(500);
 
     // vec of retransmissions sent by the server on the unicast path, each with the time, stream_id, and the size of the stream frame
     let mut server_uc_retransmissions: Vec<ServerUcRetransmission> = Vec::with_capacity(5);
@@ -632,6 +643,7 @@ fn parse_client_conn(
         client_src_ip.get_or_insert(client_ip);
     }
 
+    // TODO: pull into another method
     if let Some(fc_reader) = fc_flow_qlog_reader {
         let fc_flow_ref_time = f64_epoch_to_system_time(
             fc_reader
@@ -671,8 +683,10 @@ fn parse_client_conn(
                             && let Some(&client_received_time) = mc_recv_by_pn.get(&pn)
                         {
                             let sent_time = event_system_time(fc_flow_ref_time, qlog_event.time);
-                            mc_one_way_delays
-                                .push(client_received_time.duration_since(sent_time).ok()); // can be None if the client clock is behind
+                            mc_one_way_delays.push(FcFlowOneWayDelay {
+                                time: sent_time,
+                                delay: client_received_time.duration_since(sent_time).ok(),
+                            }); // can be None if the client clock is behind
                         }
                     }
                     _ => (),
@@ -783,8 +797,15 @@ fn parse_client_conn(
 
 fn main() {
     env_logger::builder().format_timestamp_nanos().init();
+    let args = Args::parse();
 
-    let qlog_dir = Path::new("./qlogs");
+    let out_dir = Path::new(&args.out_path);
+    match std::fs::create_dir_all(out_dir) {
+        Ok(_) => (),
+        Err(e) => info!("Failed to create output dir: {e:?}"),
+    }
+
+    let qlog_dir = Path::new(&args.in_path);
     let (logs_map, fc_flow_qlogs_map) = read_qlog_dir(qlog_dir);
 
     debug!("logs_map: {:?}", logs_map);
@@ -805,7 +826,14 @@ fn main() {
 
             let client_conn_metrics =
                 parse_client_conn(client_file, server_file, &fc_flow_qlogs_map);
-            info!("Client connection metrics: {:?}", client_conn_metrics);
+            // info!("Client connection metrics: {:?}", client_conn_metrics);
+
+            let filename = format!("{}/connection_{}_{}.json", out_dir.to_string_lossy(), client_conn_metrics.client_ip.map(|ip| ip.to_string()).unwrap_or("0.0.0.0".to_string()), key);
+            let mut out_file = BufWriter::new(File::create(filename).unwrap());
+
+            serde_json::to_writer(&mut out_file, &client_conn_metrics).unwrap();
+            out_file.flush().unwrap();
+
             Some(client_conn_metrics)
 
     }).collect();

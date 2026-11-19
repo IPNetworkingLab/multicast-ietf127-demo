@@ -16,3 +16,6 @@ qlog-parser/target/
 qlog-parser/qlogs/
 qlog-parser/without_from_mc_client-Client-0.0.0.0-d03e67451532f1db2cbdf94e044fade1.sqlog
 qlog-parser/with_from_mc_client-Client-0.0.0.0-85b0522f4682656d28263484b0cbe656.sqlog
+qlog-parser/todo.md
+qlog-parser/out_json/
+qlog-parser/test_qlogs/
